@@ -19,7 +19,7 @@ while(true){
   round++
   let prev=gameplay
   let player_choice = prompt(`Round ${round}\nPlayer Score: ${pScore}\t-\tComputer Score: ${cScore}\nPlay: R, P, or S`)[0].toUpperCase()
-  let computer_choice = round<2? Object.keys(opposite)[Math.floor(Math.random()*3)]: net.run(gameplay)
+  let computer_choice = round<3? Object.keys(opposite)[Math.floor(Math.random()*3)]: opposite[net.run(gameplay)]
   displayWinner(player_choice, computer_choice)
   gameplay += player_choice + computer_choice
   if(round==1) continue;
