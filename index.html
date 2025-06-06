@@ -99,7 +99,7 @@ window.onload = async function(){
     await artificial_wait_time()
     if(round==1) continue;
 
-    training.push({input:prev.slice(-16), output:player_choice})
+    training.push({input:prev.slice(-8), output:player_choice})
     net.train(training.slice(-16), {iterations:100})
     localStorage.setItem('gameplay',gameplay.slice(-8))
     localStorage.setItem('brain', JSON.stringify(training.slice(-16)))
