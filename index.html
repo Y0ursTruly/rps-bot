@@ -44,6 +44,7 @@ const net = new brain.recurrent.LSTM({outputSize:1});
 let gameplay = localStorage.getItem('gameplay')||"", pScore=0, cScore=0, round=0
 const opposite = {R:'P', P:'S', S:'R'}, words={R:'rock', P:'paper', S:'scissors'}
 const training = gameplay? JSON.parse(localStorage.getItem('brain')): []
+if(gameplay) net.train(training.slice(-16), {iterations:100});
 
 let take_turn=function(data){} //will be replaced by the promise resolver function of a turn
 async function player_prompt(text){
