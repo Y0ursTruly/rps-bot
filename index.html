@@ -38,8 +38,8 @@
     </style>
     <script>
 
-if(localStorage.getItem('version')!=="0.0.2-beta") localStorage.clear();
-localStorage.setItem('version','0.0.2-beta')
+if(localStorage.getItem('version')!=="0.0.3") localStorage.clear();
+localStorage.setItem('version','0.0.3')
 var history = {__proto__:null}, player_choice="", decayRate=0.7, freq={R:0,P:0,S:0}
 var gameplay = localStorage.getItem('gameplay')||"", pScore=0, cScore=0, round=0
 const opposite = {R:'P', P:'S', S:'R'}, words={R:'rock', P:'paper', S:'scissors'}
@@ -47,6 +47,7 @@ const training = gameplay? JSON.parse(localStorage.getItem('brain')): []
 function prepareModel(model){
   //models are expected to have run and train functions defined
   model.streak=0
+  model.Lstreak=0
   model.trust=0
   model.choice=""
   return model
@@ -67,7 +68,6 @@ function highest_choice(obj){
 var longLSTM = prepareModel(new brain.recurrent.LSTM({outputSize:1})) //history of 16 chars (8 games)
 var shortLSTM = prepareModel(new brain.recurrent.LSTM({outputSize:1})) //history of 8 chars (4 games)
 var userLSTM = prepareModel(new brain.recurrent.LSTM({outputSize:1})) //history of 8 chars (8 games)
-var gameRNN = prepareModel(new brain.recurrent.RNN({outputSize:1})) //history of 8 chars (4 games)
 var userRNN = prepareModel(new brain.recurrent.RNN({outputSize:1})) //history 4 of chars (4 games)
 var markov = prepareModel({ //history of 2 chars (2 games)
   run(data){
@@ -86,75 +86,65 @@ var markov = prepareModel({ //history of 2 chars (2 games)
     }
   }
 })
-var freqBias = prepareModel({ //gameplay slice of 16 chars (16 games)
-  //this is different from other models in terms of the structure of data it takes into run and train
-  run(){
-    return highest_choice(freq)
-  },
-  train(data){
-    freq.R=0
-    freq.P=0
-    freq.S=0
-    for(let i=0;i<data.length;i++){
-      const choice = data[data.length-1-i]
-      freq[choice] += decayRate**i
-    }
-  }
-})
-var models = [longLSTM,shortLSTM,userLSTM,gameRNN,userRNN,markov,freqBias]
+var models = [longLSTM,shortLSTM,userLSTM,userRNN,markov]
 
 function vote(){
   const candidates={R:0,P:0,S:0,__proto__:null}
   longLSTM.choice = longLSTM.run(gameplay.slice(-16))
   shortLSTM.choice = shortLSTM.run(gameplay.slice(-8))
   userLSTM.choice = userLSTM.run(get_player_moves(gameplay.slice(-16)))
-  gameRNN.choice = gameRNN.run(gameplay.slice(-8))
   userRNN.choice = userRNN.run(get_player_moves(gameplay.slice(-8)))
   markov.choice = markov.run(get_player_moves(gameplay.slice(-4)))
-  freqBias.choice = freqBias.run()
   
   for(let i=0;i<models.length;i++)
     candidates[models[i].choice] += models[i].trust;
   let keys=Object.keys(candidates)
   for(let i=0;i<keys.length;i++)
     if(!opposite[keys[i]]) delete candidates[keys[i]];
-  return highest_choice(candidates)
+  return opposite[highest_choice(candidates)]
 }
 function train_models(){
   const recent=training.slice(-16)
   longLSTM.train(recent.map(function(o){
     return {input:o.input.slice(-16),output:o.output}
-  }),{iterations:100})
+  }),{iterations:50})
   shortLSTM.train(recent.map(function(o){
     return {input:o.input.slice(-8),output:o.output}
-  }),{iterations:100})
+  }),{iterations:50})
   userLSTM.train(recent.map(function(o){
     return {input:get_player_moves(o.input.slice(-16)),output:o.output}
-  }),{iterations:100})
-  gameRNN.train(recent.map(function(o){
-    return {input:o.input.slice(-8),output:o.output}
-  }),{iterations:100})
+  }),{iterations:50})
   userRNN.train(recent.map(function(o){
     return {input:get_player_moves(o.input.slice(-8)),output:o.output}
-  }),{iterations:100})
+  }),{iterations:50})
   markov.train(recent.map(function(o){
     return {input:get_player_moves(o.input.slice(-4)),output:o.output}
   }))
-  freqBias.train(get_player_moves(gameplay.slice(-32)))
-
-  localStorage.setItem('gameplay',gameplay.slice(-32))
-  localStorage.setItem('brain', JSON.stringify(training.slice(-16)))
-  //the most recent 16 game samples are saved, each sample representing 8 rounds
 
   for(let i=0;i<models.length;i++){
-    if(opposite[player_choice]===models[i].choice){
+    let model_play = opposite[models[i].choice]
+    if(opposite[player_choice]===model_play){
       models[i].streak++
+      models[i].Lstreak=0
       models[i].trust += 2**Math.min(models[i].streak,3)
       continue
     }
     models[i].streak=0
-    if(player_choice===models[i].choice) models[i].trust++;
+    if(player_choice===model_play){
+      models[i].trust++
+      models[i].Lstreak=0
+    }
+    else{
+      models[i].trust -= 2**Math.min(models[i].Lstreak,3)
+      models[i].Lstreak++
+    }
+    models[i].trust = Math.max(models[i].trust,0)
   }
+
+  localStorage.setItem('gameplay',gameplay.slice(-32))
+  localStorage.setItem('brain', JSON.stringify(training.slice(-16)))
+  localStorage.setItem('trust',JSON.stringify(models.map(m=>m.trust)))
+  //the most recent 16 game samples are saved, each sample representing 8 rounds
 }
 
 
@@ -201,7 +191,11 @@ window.onload = async function(){
     button.classList.add("disabled")
     button.title="Game Loading"
   })
-  if(gameplay) train_models();
+  if(gameplay){
+    train_models()
+    const trustMap=JSON.parse(localStorage.getItem('trust'))
+    for(let i=0;i<trustMap.length;i++) models[i].trust=trustMap[i];
+  }
   while(true){
     round_ready()
     let prev=gameplay
