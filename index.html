@@ -38,6 +38,8 @@
     </style>
     <script>
 
+if(localStorage.getItem('version')!=="0.0.1") localStorage.clear();
+localStorage.setItem('version','0.0.1')
 const net = new brain.recurrent.LSTM({outputSize:1});
 let gameplay = localStorage.getItem('gameplay')||"", pScore=0, cScore=0, round=0
 const opposite = {R:'P', P:'S', S:'R'}, words={R:'rock', P:'paper', S:'scissors'}
@@ -61,6 +63,8 @@ async function artificial_wait_time(){
 }
 function round_ready(){
   round++
+  if(Number(localStorage.getItem('round'))<round)
+    localStorage.setItem('round',round.toString());
   document.querySelectorAll(".rps").forEach(function(button){
     button.classList.remove("disabled")
     button.removeAttribute("title")
@@ -82,11 +86,12 @@ function randomChoice(){
 window.onload = async function(){
   while(true){
     round_ready()
-    let prev=gameplay, stumped=round<3
+    let prev=gameplay
+    let stumped=round<3 && Number(localStorage.getItem('round'))<3
     let scores=`Player Score: ${pScore}    -    Computer Score: ${cScore}`
     let player_choice = await player_prompt(`Round ${round}\n${scores}\nPlay: R, P, or S`)
     if(!opposite[player_choice]) player_choice = randomChoice(); //make choice if nothing valid
-    let computer_choice = round<3? randomChoice(): opposite[net.run(gameplay.slice(-16))]
+    let computer_choice = stumped? randomChoice(): opposite[net.run(gameplay.slice(-8))]
     if(!computer_choice) (stumped=true, computer_choice=randomChoice()); //make choice if nothing valid
 
     displayWinner(player_choice, computer_choice, stumped)
@@ -96,9 +101,9 @@ window.onload = async function(){
 
     training.push({input:prev.slice(-16), output:player_choice})
     net.train(training.slice(-16), {iterations:100})
-    localStorage.setItem('gameplay',gameplay.slice(-16))
-    localStorage.setItem('brain', JSON.stringify(training.slice(-8)))
-    //this would look at history slices 8 rounds long, with a history of the 16 most recent games
+    localStorage.setItem('gameplay',gameplay.slice(-8))
+    localStorage.setItem('brain', JSON.stringify(training.slice(-16)))
+    //this would look at history slices 4 rounds long, with a history of the 16 most recent games
   }
 }
 
